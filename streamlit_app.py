@@ -63,12 +63,29 @@ def get_hotels():
 
 
 def get_bookings():
+    """Load the signed-in user's bookings, then attach hotel details locally.
+
+    We deliberately use two simple queries instead of a nested PostgREST relationship
+    query. This is more robust with the RLS/GRANT setup used by this learning app.
+    """
     if not st.session_state.profile:
         return []
-    return (supabase.table("bookings")
-            .select("booking_id,customer_id,hotel_id,check_in,check_out,guests,total_price,status,created_at,hotels(hotel_name,area,stars,price_per_night)")
-            .eq("customer_id", st.session_state.profile["customer_id"])
-            .order("created_at", desc=True).execute().data or [])
+
+    booking_rows = (
+        supabase.table("bookings")
+        .select("booking_id,customer_id,hotel_id,check_in,check_out,guests,total_price,status,created_at")
+        .eq("customer_id", st.session_state.profile["customer_id"])
+        .order("created_at", desc=True)
+        .execute()
+        .data
+        or []
+    )
+
+    hotel_lookup = {h["hotel_id"]: h for h in get_hotels()}
+    for booking in booking_rows:
+        booking["hotels"] = hotel_lookup.get(booking["hotel_id"], {})
+
+    return booking_rows
 
 
 def go_to_booking(hotel_id):
